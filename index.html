@@ -247,7 +247,8 @@ function copyImg(bl){try{if(!(navigator.clipboard&&window.ClipboardItem&&window.
 /* ---- auto-send through Google Apps Script ---- */
 function lsGet(k){try{return localStorage.getItem(k)||''}catch(e){return ''}}
 function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
-$('gas').value=lsGet('billGas');$('sec').value=lsGet('billSec');
+var GAS_URL='https://script.google.com/macros/s/AKfycbw06qP5_N-i09jFsL1fiU9Xy7wtoHvpCzU4_Jo6uxXUZi2VrHrGlvVUCB36vJmNC-hy/exec',GAS_SECRET='dracosecret';
+$('gas').value=lsGet('billGas')||GAS_URL;$('sec').value=lsGet('billSec')||GAS_SECRET;
 $('gas').addEventListener('input',function(){lsSet('billGas',this.value.trim())});
 $('sec').addEventListener('input',function(){lsSet('billSec',this.value)});
 $('send').onclick=function(){
