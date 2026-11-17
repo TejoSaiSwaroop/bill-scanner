@@ -34,6 +34,8 @@ input:focus-visible,button:focus-visible,a.btn:focus-visible{outline:3px solid v
 .receipt{position:relative;background:#fff;padding:10px 10px 18px;border-radius:4px;box-shadow:0 6px 18px rgba(0,0,0,.18);margin:6px 6px 20px}
 .receipt::after{content:"";position:absolute;left:0;right:0;bottom:-9px;height:10px;background:linear-gradient(135deg,#fff 50%,transparent 50%) 0 0/14px 10px,linear-gradient(225deg,#fff 50%,transparent 50%) 0 0/14px 10px}
 .receipt img{display:block;width:100%;height:auto;max-height:60vh;object-fit:contain;margin:0 auto}
+.row2{display:flex;gap:6px;margin:0 0 12px}
+.row2 button{flex:1;font:inherit;font-weight:600;padding:10px 4px;border-radius:10px;border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
 .hide{display:none}
 .vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0);pointer-events:none}
 .ok{color:#1d9a6c;font-weight:600;font-size:14px;margin:8px 0 0}
@@ -66,8 +68,9 @@ input:focus-visible,button:focus-visible,a.btn:focus-visible{outline:3px solid v
   <section id="s2" class="hide">
     <div class="card">
       <canvas id="ed" aria-label="Bill photo with draggable corner handles"></canvas>
-      <p class="hint">Corners were found automatically. Drag any handle to fit the bill edges.</p>
+      <p class="hint" id="det" role="status"></p>
     </div>
+    <div class="row2"><button id="auto">Auto-detect again</button><button id="whole">Use whole photo</button></div>
     <button class="btn" id="scan">Scan this bill</button>
     <button class="btn alt" id="back1">Choose another photo</button>
   </section>
@@ -95,7 +98,7 @@ input:focus-visible,button:focus-visible,a.btn:focus-visible{outline:3px solid v
 (function(){
 var $=function(i){return document.getElementById(i)};
 var src=document.createElement('canvas'),sctx=src.getContext('2d',{willReadFrequently:true});
-var ed=$('ed'),ex=ed.getContext('2d'),pts=[],K=1,drag=-1,warped=null,mode='color',blobUrl=null;
+var detOK=true,ed=$('ed'),ex=ed.getContext('2d'),pts=[],K=1,drag=-1,warped=null,mode='color',blobUrl=null;
 
 /* saved address */
 try{var sv=localStorage.getItem('billTo');if(sv)$('to').value=sv}catch(e){}
@@ -106,6 +109,8 @@ function step(n){['s1','s2','s3'].forEach(function(s,i){$(s).classList.toggle('h
 $('to').addEventListener('input',function(){if(validTo()){$('toerr').textContent='';try{localStorage.setItem('billTo',validTo())}catch(e){}}});
 $('file').onchange=function(){var f=this.files[0];if(f)load(f);this.value=''};
 $('back1').onclick=function(){step(1)};
+$('auto').onclick=function(){$('det').dataset.m='';pts=detect();drawEd();note()};
+$('whole').onclick=function(){$('det').dataset.m='1';detOK=true;pts=[{x:0,y:0},{x:src.width,y:0},{x:src.width,y:src.height},{x:0,y:src.height}];drawEd();var t=$('det');t.style.color='var(--mut)';t.textContent='Using the whole photo. Drag the corners in to fit the bill.'}
 $('again').onclick=function(){step(1)};
 function setMail(){var to=validTo()||'',d=new Date().toISOString().slice(0,10);
   $('mt').textContent=to||'your address';
@@ -122,7 +127,7 @@ function load(f){
    .then(function(b){
     var w=b.width||b.naturalWidth,h=b.height||b.naturalHeight,s=Math.min(1,2400/Math.max(w,h));
     src.width=Math.round(w*s);src.height=Math.round(h*s);sctx.drawImage(b,0,0,src.width,src.height);
-    pts=detect();setupEd();step(2)})
+    $('det').dataset.m='';pts=detect();setupEd();note();step(2)})
    .catch(function(){$('toerr').textContent='Could not read that image.'})}
 
 /* ---- edge detection: find the large bright (or dark) blob, use its extreme corners ---- */
@@ -142,7 +147,11 @@ function detect(){
   [true,false].forEach(function(bright){
     if(res)return;var r=blob(function(o){return bright?b[o]>t:b[o]<=t},W,H);
     if(r&&r.size/tot>.12&&r.size/tot<.93)res=r});
-  if(!res)return[{x:src.width*.08,y:src.height*.06},{x:src.width*.92,y:src.height*.06},{x:src.width*.92,y:src.height*.94},{x:src.width*.08,y:src.height*.94}];
+  var full=[{x:src.width*.08,y:src.height*.06},{x:src.width*.92,y:src.height*.06},{x:src.width*.92,y:src.height*.94},{x:src.width*.08,y:src.height*.94}];
+  if(!res){detOK=false;return full}
+  var q=res.c,ar=Math.abs(q[0].x*q[1].y-q[1].x*q[0].y+q[1].x*q[2].y-q[2].x*q[1].y+q[2].x*q[3].y-q[3].x*q[2].y+q[3].x*q[0].y-q[0].x*q[3].y)/2;
+  detOK=ar>tot*.15&&res.size/Math.max(ar,1)>.72;
+  if(!detOK&&ar<tot*.15)return full;
   return res.c.map(function(p){return{x:Math.min(src.width,Math.max(0,p.x/s)),y:Math.min(src.height,Math.max(0,p.y/s))}})}
 
 function blob(test,W,H){
@@ -165,10 +174,13 @@ function blob(test,W,H){
 function setupEd(){
   K=Math.min(1,1200/Math.max(src.width,src.height));
   ed.width=Math.round(src.width*K);ed.height=Math.round(src.height*K);drawEd()}
+function note(){var e=$('det');e.style.fontWeight='600';
+  if(detOK){e.style.color='#1d9a6c';e.textContent='Edges found automatically. If anything looks off, drag a corner.'}
+  else{e.style.color='#e5484d';e.textContent='Couldn’t find the edges on this photo. Drag the four corners onto the bill, then tap Scan.'}}
 function drawEd(){
   ex.drawImage(src,0,0,ed.width,ed.height);
   ex.beginPath();pts.forEach(function(p,i){ex[i?'lineTo':'moveTo'](p.x*K,p.y*K)});ex.closePath();
-  ex.fillStyle='rgba(242,183,5,.16)';ex.fill();ex.lineWidth=Math.max(2,ed.width/260);ex.strokeStyle='#f2b705';ex.stroke();
+  ex.fillStyle=detOK?'rgba(242,183,5,.16)':'rgba(255,90,95,.16)';ex.fill();ex.lineWidth=Math.max(2,ed.width/260);ex.strokeStyle=detOK?'#f2b705':'#ff5a5f';ex.stroke();
   var r=Math.max(12,ed.width/32);
   pts.forEach(function(p){ex.beginPath();ex.arc(p.x*K,p.y*K,r,0,7);ex.fillStyle='rgba(20,32,43,.55)';ex.fill();
     ex.lineWidth=Math.max(2.5,ed.width/200);ex.strokeStyle='#fff';ex.stroke()})}
@@ -178,6 +190,7 @@ ed.addEventListener('pointerdown',function(e){
   pts.forEach(function(p,i){var d=Math.hypot(p.x-q.x,p.y-q.y)*K;if(d<bd){bd=d;drag=i}});
   if(bd>56*sc)drag=-1;if(drag>-1){ed.setPointerCapture(e.pointerId);e.preventDefault()}});
 ed.addEventListener('pointermove',function(e){if(drag<0)return;var q=at(e);
+  if(!detOK||$('det').dataset.m!=='1'){detOK=true;$('det').dataset.m='1';var t=$('det');t.style.color='var(--mut)';t.textContent='Adjusting manually. Tap Scan when the outline fits the bill.'}
   pts[drag]={x:Math.min(src.width,Math.max(0,q.x)),y:Math.min(src.height,Math.max(0,q.y))};drawEd()});
 ['pointerup','pointercancel'].forEach(function(n){ed.addEventListener(n,function(){drag=-1})});
 
