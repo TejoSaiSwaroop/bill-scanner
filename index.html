@@ -88,7 +88,6 @@ input:focus-visible,button:focus-visible,a.btn:focus-visible{outline:3px solid v
     <button class="btn alt" id="share">Share to Mail app</button>
     <a class="btn alt" id="mailto" href="#" target="_blank" rel="noopener noreferrer">Open email draft to <span id="mt"></span></a>
     <a class="btn alt" id="gmail" href="#" target="_blank" rel="noopener noreferrer">Compose in Gmail</a>
-    
     <p class="ok" id="msg" role="status"></p>
     <button class="btn alt" id="again">Scan another bill</button>
   </section>
@@ -121,14 +120,25 @@ $('mailto').addEventListener('click',function(e){var to=validTo();
   if(!to){e.preventDefault();$('msg').textContent='Enter a valid email address above first.';return}
   try{navigator.clipboard.writeText(to).then(function(){$('msg').textContent='Address copied ('+to+'). If your mail app didn’t open, open it and paste the address.'},function(){})}catch(x){}});
 
+function decode(f){
+  function viaImg(){return new Promise(function(res,rej){var im=new Image();im.onload=function(){res(im)};im.onerror=function(){rej()};im.src=URL.createObjectURL(f)})}
+  function viaReader(){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){res(im)};im.onerror=function(){rej()};im.src=r.result};r.onerror=function(){rej()};r.readAsDataURL(f)})}
+  var chain=Promise.reject();
+  if(window.createImageBitmap)chain=createImageBitmap(f,{imageOrientation:'from-image'}).catch(function(){return createImageBitmap(f)});
+  return chain.catch(viaImg).catch(viaReader)}
 function load(f){
-  var p=window.createImageBitmap?createImageBitmap(f,{imageOrientation:'from-image'}):Promise.reject();
-  p.catch(function(){return new Promise(function(res,rej){var im=new Image();im.onload=function(){res(im)};im.onerror=rej;im.src=URL.createObjectURL(f)})})
-   .then(function(b){
-    var w=b.width||b.naturalWidth,h=b.height||b.naturalHeight,s=Math.min(1,2400/Math.max(w,h));
-    src.width=Math.round(w*s);src.height=Math.round(h*s);sctx.drawImage(b,0,0,src.width,src.height);
-    $('det').dataset.m='';pts=detect();setupEd();note();step(2)})
-   .catch(function(){$('toerr').textContent='Could not read that image.'})}
+  $('toerr').textContent='';
+  decode(f).then(function(b){
+    try{
+      var w=b.width||b.naturalWidth,h=b.height||b.naturalHeight,s=Math.min(1,2400/Math.max(w,h));
+      src.width=Math.max(1,Math.round(w*s));src.height=Math.max(1,Math.round(h*s));sctx.drawImage(b,0,0,src.width,src.height);
+      if(b.close)try{b.close()}catch(e){}
+      $('det').dataset.m='';
+      try{pts=detect()}catch(e){detOK=false;pts=[{x:src.width*.08,y:src.height*.06},{x:src.width*.92,y:src.height*.06},{x:src.width*.92,y:src.height*.94},{x:src.width*.08,y:src.height*.94}]}
+      setupEd();note();step(2)
+    }catch(err){$('toerr').textContent='Something went wrong while processing that photo. Try a smaller or different photo.'}
+  },function(){
+    $('toerr').textContent=/hei[cf]/i.test(f.type+f.name)?'This photo is in HEIC format, which your browser can’t open. Take it as JPEG or share it as JPEG, then try again.':'Couldn’t open that image. Try a JPEG or PNG photo.'})}
 
 /* ---- edge detection: find the large bright (or dark) blob, use its extreme corners ---- */
 function detect(){
