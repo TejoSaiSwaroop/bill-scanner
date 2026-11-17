@@ -127,13 +127,15 @@ function decodeBlob(f){
   if(window.createImageBitmap)chain=createImageBitmap(f,{imageOrientation:'from-image'}).catch(function(){return createImageBitmap(f)});
   return chain.catch(viaImg).catch(viaReader)}
 function isHeic(f){return /hei[cf]/i.test((f.type||'')+' '+(f.name||''))}
-function loadHeic(){return window.heic2any?Promise.resolve():new Promise(function(res,rej){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s)})}
+function loadScript(u){return new Promise(function(res,rej){var s=document.createElement('script');s.src=u;s.onload=res;s.onerror=function(){rej(new Error('Could not load converter'))};document.head.appendChild(s)})}
+function heicConvert(f){
+  function viaHeicTo(){return(window.HeicTo?Promise.resolve():loadScript('https://cdn.jsdelivr.net/npm/heic-to@1.4.2/dist/iife/heic-to.js')).then(function(){return HeicTo({blob:f,type:'image/jpeg',quality:.92})})}
+  function viaHeic2any(){return(window.heic2any?Promise.resolve():loadScript('https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js')).then(function(){return heic2any({blob:f,toType:'image/jpeg',quality:.92})}).then(function(r){return Array.isArray(r)?r[0]:r})}
+  return viaHeicTo().catch(viaHeic2any)}
 function decode(f){
   return decodeBlob(f).catch(function(){
-    if(!isHeic(f))return Promise.reject();
-    var t=$('toerr');t.style.color='var(--mut)';t.textContent='Converting HEIC photo… this can take a few seconds.';
-    return loadHeic().then(function(){return heic2any({blob:f,toType:'image/jpeg',quality:.92})})
-      .then(function(r){return decodeBlob(Array.isArray(r)?r[0]:r)})})}
+    var t=$('toerr');t.style.color='var(--mut)';t.textContent='Converting photo… this can take a few seconds.';
+    return heicConvert(f).then(decodeBlob)})}
 function load(f){
     $('toerr').textContent='';$('toerr').style.color='';
   decode(f).then(function(b){
@@ -145,8 +147,8 @@ function load(f){
       try{pts=detect()}catch(e){detOK=false;pts=[{x:src.width*.08,y:src.height*.06},{x:src.width*.92,y:src.height*.06},{x:src.width*.92,y:src.height*.94},{x:src.width*.08,y:src.height*.94}]}
       $('toerr').textContent='';setupEd();note();step(2)
     }catch(err){$('toerr').textContent='Something went wrong while processing that photo. Try a smaller or different photo.'}
-  },function(){
-    $('toerr').style.color='';$('toerr').textContent=isHeic(f)?'This HEIC photo couldn’t be converted. It may need an internet connection. Try sharing it as JPEG.':'Couldn’t open that image. Try a JPEG or PNG photo.'})}
+    },function(err){var m=String(err&&err.message||err||'');
+    $('toerr').style.color='';$('toerr').textContent='Couldn’t open that photo ('+m.slice(0,80)+'). Try sharing it as JPEG.'})}
 /* ---- edge detection: find the large bright (or dark) blob, use its extreme corners ---- */
 function detect(){
   var s=360/Math.max(src.width,src.height),W=Math.max(8,Math.round(src.width*s)),H=Math.max(8,Math.round(src.height*s));
